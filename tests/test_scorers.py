@@ -1,7 +1,5 @@
 """Tests for scoring strategies."""
 
-import os
-
 from risk_assessor.models import ChangeRequest
 from risk_assessor.scorers import get_scorer
 from risk_assessor.scorers.simple_scorer import SimpleScorer
