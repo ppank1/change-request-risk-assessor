@@ -21,22 +21,33 @@ pipeline {
 
         stage('Lint') {
             steps {
-                sh 'pip install flake8'
-                sh 'flake8 src/ tests/'
+                sh '''
+                    python3 -m venv venv
+                    . venv/bin/activate
+                    pip install flake8
+                    flake8 src/ tests/
+                '''
             }
         }
 
         stage('Test') {
             steps {
-                sh 'pip install -r requirements.txt'
-                sh 'pip install -e .'
-                sh 'pytest --junitxml=reports/test-results.xml --cov-report=xml:reports/coverage.xml'
+                sh '''
+                    . venv/bin/activate
+                    pip install -r requirements.txt
+                    pip install -e .
+                    pytest --junitxml=reports/test-results.xml --cov-report=xml:reports/coverage.xml
+                '''
             }
         }
 
         stage('Security Scan') {
             steps {
-                sh 'bandit -r src/ -f json -o reports/bandit-report.json || true'
+                sh '''
+                    . venv/bin/activate
+                    pip install bandit
+                    bandit -r src/ -f json -o reports/bandit-report.json || true
+                '''
             }
         }
 
