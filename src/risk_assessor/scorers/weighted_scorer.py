@@ -85,3 +85,4 @@ class WeightedScorer(RiskScorer):
             factors.append(f"Combined risk multiplier applied (1.2x, {high_factor_count} high factors)")
 
         return min(score, 100), factors
+# Enhanced weighted scoring with combined risk multiplier
