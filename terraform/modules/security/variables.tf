@@ -30,3 +30,13 @@ variable "jenkins_private_ip" {
   description = "Private IP of the Jenkins host, the only source allowed to reach the k3s API."
   type        = string
 }
+
+variable "tfstate_bucket_arn" {
+  description = "ARN of the Terraform remote-state bucket the Jenkins CI role may read."
+  type        = string
+}
+
+variable "tfstate_lock_table_arn" {
+  description = "ARN of the DynamoDB lock table the Jenkins CI role may lock."
+  type        = string
+}

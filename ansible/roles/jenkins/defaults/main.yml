@@ -11,3 +11,26 @@ jenkins_admin_email: ""
 jenkins_extra_packages:
   - kubectl
 jenkins_kubectl_url: "https://dl.k8s.io/release/v1.31.0/bin/linux/amd64/kubectl"
+
+# --- CI toolchain for the pipeline's IaC stages -------------------------------
+jenkins_terraform_repo_key_url: https://apt.releases.hashicorp.com/gpg
+jenkins_terraform_keyring: /etc/apt/keyrings/hashicorp.gpg
+jenkins_terraform_repo: "deb [signed-by={{ jenkins_terraform_keyring }}] https://apt.releases.hashicorp.com noble main"
+jenkins_terraform_version: "1.9.8-1"
+jenkins_tfsec_version: "1.28.14"
+jenkins_tfsec_url: "https://github.com/aquasecurity/tfsec/releases/download/v{{ jenkins_tfsec_version }}/tfsec-linux-amd64"
+jenkins_ssm_plugin_url: https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb
+jenkins_awscli_url: https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip
+# Ansible is installed with pipx so the versions match the operators'
+# workstations exactly (Ubuntu's apt packages are several majors behind, and a
+# lint on a different major would report different findings).
+jenkins_ansible_core_version: "2.21.4"
+jenkins_ansible_lint_version: "26.8.0"
+jenkins_pipx_home: /opt/pipx
+jenkins_pipx_bin_dir: /usr/local/bin
+# Same collections as ansible/requirements.yml, installed for the jenkins user
+# because the pipeline runs ansible-playbook as that user.
+jenkins_ansible_collections:
+  - amazon.aws
+  - community.general
+  - ansible.posix

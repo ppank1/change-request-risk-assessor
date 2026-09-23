@@ -31,7 +31,7 @@ resource "aws_instance" "jenkins" {
   subnet_id              = var.subnet_id
   vpc_security_group_ids = [var.jenkins_sg_id]
   key_name               = aws_key_pair.this.key_name
-  iam_instance_profile   = var.instance_profile_name
+  iam_instance_profile   = coalesce(var.jenkins_instance_profile_name, var.instance_profile_name)
   private_ip             = var.jenkins.private_ip
   ebs_optimized          = true
   user_data              = var.baseline_user_data ? local.user_data.jenkins : null

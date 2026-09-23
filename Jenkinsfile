@@ -5,6 +5,10 @@ pipeline {
         pollSCM('H/2 * * * *')
     }
 
+    options {
+        timeout(time: 30, unit: 'MINUTES')
+    }
+
     environment {
         REGISTRY = 'docker.io'
         IMAGE_NAME = 'crra'
@@ -14,14 +18,24 @@ pipeline {
         // Docker Hub credential; its username is also the image namespace,
         // so the pushed image is docker.io/<user>/crra:<sha>.
         DOCKER_CREDENTIALS = credentials('docker-registry-credentials')
+        TF_DIR = 'terraform/environments/dev'
+        TF_IN_AUTOMATION = 'true'
+        TF_INPUT = '0'
+        AWS_REGION = 'us-west-2'
+        // AWS access comes from the host's instance profile (crra-jenkins-role):
+        // read state + lock + describe for plan, SSM sessions for Ansible.
+        // No access keys are stored anywhere in Jenkins.
     }
 
     stages {
         stage('Checkout') {
             steps {
                 checkout scm
+                sh 'mkdir -p reports'
             }
         }
+
+        // ---------------- Application ----------------
 
         stage('Lint') {
             steps {
@@ -55,6 +69,64 @@ pipeline {
             }
         }
 
+        // ---------------- Infrastructure as code ----------------
+
+        stage('Terraform Validate') {
+            steps {
+                // fmt -check fails on any unformatted file; validate runs
+                // without a backend so it needs no AWS access or state lock.
+                sh '''
+                    terraform fmt -check -recursive -diff terraform/
+                    for dir in terraform/bootstrap ${TF_DIR}; do
+                        echo "== validate ${dir}"
+                        terraform -chdir=${dir} init -backend=false -input=false >/dev/null
+                        terraform -chdir=${dir} validate
+                    done
+                '''
+            }
+        }
+
+        stage('IaC Security Scan') {
+            steps {
+                // tfsec scans a root module and everything it calls, so both
+                // roots are scanned. Findings fail the stage; accepted risks
+                // are annotated in-code with a tfsec:ignore and a reason.
+                sh '''
+                    tfsec --version
+                    # JSON artefacts first (soft-fail so they exist even when
+                    # findings then fail the console run below).
+                    tfsec ${TF_DIR} --soft-fail --format json --out reports/tfsec-dev.json
+                    tfsec terraform/bootstrap --soft-fail --format json --out reports/tfsec-bootstrap.json
+                    tfsec ${TF_DIR}
+                    tfsec terraform/bootstrap
+                '''
+            }
+        }
+
+        stage('Ansible Lint') {
+            steps {
+                sh 'cd ansible && ansible-lint --version && ansible-lint --profile production'
+            }
+        }
+
+        stage('Terraform Plan') {
+            steps {
+                // Plan against dev is archived as an artefact for review; apply
+                // stays a human action. The lock is taken and released like any
+                // other operator, so a concurrent apply blocks this stage.
+                sh '''#!/usr/bin/env bash
+                    set -euo pipefail
+                    terraform -chdir=${TF_DIR} init -input=false
+                    terraform -chdir=${TF_DIR} plan -var-file=dev.tfvars -lock-timeout=60s \
+                        -out=dev.tfplan -no-color | tee reports/terraform-plan.txt
+                    terraform -chdir=${TF_DIR} show -json dev.tfplan > reports/terraform-plan.json
+                    rm -f ${TF_DIR}/dev.tfplan
+                '''
+            }
+        }
+
+        // ---------------- Build and ship ----------------
+
         stage('Docker Build') {
             steps {
                 sh "docker build -t ${REGISTRY}/${DOCKER_CREDENTIALS_USR}/${IMAGE_NAME}:${IMAGE_TAG} ."
@@ -84,13 +156,32 @@ pipeline {
                 expression { (env.BRANCH_NAME ?: env.GIT_BRANCH ?: '').endsWith('main') }
             }
             steps {
-                sh 'kubectl apply -f k8s/namespace.yaml'
-                sh 'kubectl apply -f k8s/configmap.yaml'
-                sh 'kubectl apply -f k8s/deployment.yaml'
-                sh 'kubectl apply -f k8s/service.yaml'
-                // Pin the deployment to the image built from this exact commit.
-                sh "kubectl set image deployment/crra crra=${REGISTRY}/${DOCKER_CREDENTIALS_USR}/${IMAGE_NAME}:${IMAGE_TAG} -n crra-dev"
-                sh 'kubectl rollout status deployment/crra -n crra-dev --timeout=120s'
+                // deploy.sh applies the manifests, pins the SHA-tagged image,
+                // waits for rollout and checks /health inside a new pod.
+                sh "scripts/deploy.sh ${REGISTRY}/${DOCKER_CREDENTIALS_USR}/${IMAGE_NAME}:${IMAGE_TAG}"
+            }
+        }
+
+        stage('Configuration Management') {
+            when {
+                expression { (env.BRANCH_NAME ?: env.GIT_BRANCH ?: '').endsWith('main') }
+            }
+            steps {
+                // Converges both hosts with the same playbook operators run by
+                // hand. The vault password and SSH key come from Jenkins
+                // Credentials as temporary files; env vars override the
+                // ~/.crra-vault-pass and ~/.ssh paths in ansible.cfg.
+                withCredentials([
+                    file(credentialsId: 'crra-vault-password', variable: 'ANSIBLE_VAULT_PASSWORD_FILE'),
+                    sshUserPrivateKey(credentialsId: 'crra-ssh-key', keyFileVariable: 'ANSIBLE_PRIVATE_KEY_FILE')
+                ]) {
+                    sh '''#!/usr/bin/env bash
+                        set -euo pipefail
+                        cd ansible
+                        ansible --version | head -1
+                        ansible-playbook playbooks/site.yml 2>&1 | tee ../reports/ansible-site.txt
+                    '''
+                }
             }
         }
     }

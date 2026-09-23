@@ -67,3 +67,9 @@ variable "instance_profile_name" {
   type        = string
   default     = null
 }
+
+variable "jenkins_instance_profile_name" {
+  description = "IAM instance profile for the Jenkins host; falls back to instance_profile_name."
+  type        = string
+  default     = null
+}

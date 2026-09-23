@@ -1,0 +1,90 @@
+---
+# Tools the pipeline's IaC stages need on the Jenkins host: terraform, tfsec,
+# ansible + ansible-lint, the AWS CLI with the Session Manager plugin, and the
+# Ansible collections installed for the jenkins user.
+
+- name: Add HashiCorp apt signing key (dearmored)
+  ansible.builtin.shell:
+    cmd: >-
+      set -o pipefail &&
+      curl -fsSL {{ jenkins_terraform_repo_key_url }} | gpg --dearmor -o {{ jenkins_terraform_keyring }}
+    creates: "{{ jenkins_terraform_keyring }}"
+    executable: /bin/bash
+
+- name: Add HashiCorp apt repository
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/hashicorp.list
+    content: "{{ jenkins_terraform_repo }}\n"
+    owner: root
+    group: root
+    mode: "0644"
+  register: jenkins_hashicorp_repo_file
+
+- name: Install Terraform and Python tooling
+  ansible.builtin.apt:
+    name:
+      - "terraform={{ jenkins_terraform_version }}"
+      - pipx
+      - python3-boto3
+      - python3-botocore
+      - unzip
+    state: present
+    update_cache: "{{ jenkins_hashicorp_repo_file.changed | bool }}"
+
+# The apt 'awscli' package is v1 and lives in Ubuntu's universe component,
+# which the image does not enable; install AWS CLI v2 from AWS instead.
+- name: Check whether AWS CLI v2 is already installed
+  ansible.builtin.stat:
+    path: /usr/local/bin/aws
+  register: jenkins_awscli_installed
+
+- name: Download and unpack AWS CLI v2 installer
+  ansible.builtin.unarchive:
+    src: "{{ jenkins_awscli_url }}"
+    dest: /tmp
+    remote_src: true
+  when: not jenkins_awscli_installed.stat.exists
+
+- name: Run AWS CLI v2 installer
+  ansible.builtin.command:
+    cmd: /tmp/aws/install
+    creates: /usr/local/bin/aws
+
+# pipx puts each tool in its own venv with a launcher in PATH; versions are
+# pinned so the pipeline lints with exactly what operators lint with.
+- name: Install ansible-core and ansible-lint with pipx
+  ansible.builtin.command:
+    cmd: "pipx install {{ item.pkg }}=={{ item.version }}"
+    creates: "{{ jenkins_pipx_home }}/venvs/{{ item.pkg }}"
+  environment:
+    PIPX_HOME: "{{ jenkins_pipx_home }}"
+    PIPX_BIN_DIR: "{{ jenkins_pipx_bin_dir }}"
+  loop:
+    - { pkg: ansible-core, version: "{{ jenkins_ansible_core_version }}" }
+    - { pkg: ansible-lint, version: "{{ jenkins_ansible_lint_version }}" }
+
+- name: Give ansible-core the AWS SDK for the aws_ec2 inventory
+  ansible.builtin.command:
+    cmd: pipx inject ansible-core boto3 botocore
+    creates: "{{ jenkins_pipx_home }}/venvs/ansible-core/lib/python3*/site-packages/boto3"
+  environment:
+    PIPX_HOME: "{{ jenkins_pipx_home }}"
+    PIPX_BIN_DIR: "{{ jenkins_pipx_bin_dir }}"
+
+- name: Install tfsec
+  ansible.builtin.get_url:
+    url: "{{ jenkins_tfsec_url }}"
+    dest: /usr/local/bin/tfsec
+    mode: "0755"
+
+- name: Install Session Manager plugin (SSH-over-SSM for Ansible)
+  ansible.builtin.apt:
+    deb: "{{ jenkins_ssm_plugin_url }}"
+
+- name: Install Ansible collections for the jenkins user
+  ansible.builtin.command:
+    cmd: "ansible-galaxy collection install {{ item }}"
+    creates: "{{ jenkins_home }}/.ansible/collections/ansible_collections/{{ item | replace('.', '/') }}"
+  loop: "{{ jenkins_ansible_collections }}"
+  become: true
+  become_user: jenkins

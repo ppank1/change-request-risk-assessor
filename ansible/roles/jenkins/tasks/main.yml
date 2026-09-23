@@ -57,6 +57,9 @@
     dest: /usr/local/bin/kubectl
     mode: "0755"
 
+- name: Install CI toolchain (terraform, tfsec, ansible-lint, aws cli)
+  ansible.builtin.include_tasks: ci_tools.yml
+
 # The root URL lived only in the UI before and went stale when the public IP
 # changed. Owning it here means every run re-asserts the correct value.
 - name: Set Jenkins root URL
