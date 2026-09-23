@@ -50,8 +50,34 @@ Both hosts have an EIP managed in `modules/compute`. Stop/start no longer change
 ## Terraform state
 
 - Backend: S3 `crra-tfstate-<account>` (versioned, encrypted, TLS-only) with DynamoDB lock `crra-tfstate-lock`, created by `terraform/bootstrap`.
-- A stuck lock (`Error acquiring the state lock`) after a crashed run: confirm no one is applying, then `terraform force-unlock <LOCK_ID>`.
+- One bucket, one lock table, **one key per environment**: `dev/terraform.tfstate`, `staging/terraform.tfstate`. Each environment root (`terraform/environments/<env>/`) has its own `backend.tf` naming its key and its own `<env>.tfvars`. Two engineers in different environments never contend; two in the same environment are serialised by the lock.
 - Recovering a bad state write: S3 versioning keeps every prior state — download the previous version and `terraform state push`.
+
+### Working in a team: what the lock does
+
+Every `plan` (unless `-lock=false`), `apply`, `import` and `state` command writes a lock item to DynamoDB before touching state. A second operator on the same environment sees:
+
+```
+Error: Error acquiring the state lock
+Lock Info:
+  ID:        <uuid>
+  Path:      crra-tfstate-<account>/dev/terraform.tfstate
+  Operation: OperationTypeApply
+  Who:       <user>@<host>
+  Created:   <timestamp>
+```
+
+That is the system working. Wait for the holder to finish (`Who` tells you who to ask), then retry. Read-only checks that must not wait can use `terraform plan -lock=false` — never `apply -lock=false`. The Jenkins pipeline's plan stage takes the lock like any operator, so a build and an engineer's apply cannot interleave.
+
+### Stuck lock
+
+A lock survives its holder only when the process died mid-run (laptop closed, SSH dropped, CI job killed). Before touching it:
+
+1. Read the lock: `Who` and `Created`. If it is minutes old, ask the person — they may still be running.
+2. Confirm the process is gone: on the `Who` host, `pgrep -af terraform`; for Jenkins, check the build is not in progress.
+3. Only then: `terraform force-unlock <LOCK_ID>` from the same environment directory. It removes the DynamoDB item and nothing else.
+
+`force-unlock` is safe when the holder is dead. It is **never** safe while an apply is running: the next operator's writes would interleave with the live run and the state file can end up describing neither. If in doubt, wait — a stale lock costs minutes; a corrupted state costs an afternoon with S3 versions.
 
 ## Routine checks
 

@@ -2,6 +2,12 @@ variable "vpc_id" {
   type = string
 }
 
+variable "name_prefix" {
+  description = "Prefix for IAM roles, instance profiles and the test SG. IAM names are account-global, so a second environment in the same account needs its own prefix."
+  type        = string
+  default     = "crra"
+}
+
 variable "jenkins_sg_name" {
   type    = string
   default = "crra-jenkins-sg"

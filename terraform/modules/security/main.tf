@@ -136,8 +136,8 @@ resource "aws_vpc_security_group_egress_rule" "k3s_all" {
 # SSH plus the :8000 bootstrap health marker, admin CIDRs only.
 
 resource "aws_security_group" "test" {
-  name        = "crra-test-sg"
-  description = "crra-test-sg"
+  name        = "${var.name_prefix}-test-sg"
+  description = "${var.name_prefix}-test-sg"
   vpc_id      = var.vpc_id
 }
 
@@ -182,7 +182,7 @@ data "aws_iam_policy_document" "instance_assume" {
 }
 
 resource "aws_iam_role" "instance" {
-  name               = "crra-instance-role"
+  name               = "${var.name_prefix}-instance-role"
   assume_role_policy = data.aws_iam_policy_document.instance_assume.json
 }
 
@@ -192,7 +192,7 @@ resource "aws_iam_role_policy_attachment" "instance_ssm" {
 }
 
 resource "aws_iam_instance_profile" "instance" {
-  name = "crra-instance-profile"
+  name = "${var.name_prefix}-instance-profile"
   role = aws_iam_role.instance.name
 }
 
@@ -206,7 +206,7 @@ data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 
 resource "aws_iam_role" "jenkins" {
-  name               = "crra-jenkins-role"
+  name               = "${var.name_prefix}-jenkins-role"
   assume_role_policy = data.aws_iam_policy_document.instance_assume.json
 }
 
@@ -282,12 +282,12 @@ data "aws_iam_policy_document" "jenkins_ci" {
 }
 
 resource "aws_iam_role_policy" "jenkins_ci" {
-  name   = "crra-jenkins-ci"
+  name   = "${var.name_prefix}-jenkins-ci"
   role   = aws_iam_role.jenkins.id
   policy = data.aws_iam_policy_document.jenkins_ci.json
 }
 
 resource "aws_iam_instance_profile" "jenkins" {
-  name = "crra-jenkins-profile"
+  name = "${var.name_prefix}-jenkins-profile"
   role = aws_iam_role.jenkins.name
 }
