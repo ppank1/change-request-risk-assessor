@@ -93,12 +93,14 @@ pipeline {
                 // are annotated in-code with a tfsec:ignore and a reason.
                 sh '''
                     tfsec --version
+                    # --no-colour: the Jenkins console has no ANSI renderer, so
+                    # colour codes would print as literal escape sequences.
                     # JSON artefacts first (soft-fail so they exist even when
                     # findings then fail the console run below).
-                    tfsec ${TF_DIR} --soft-fail --format json --out reports/tfsec-dev.json
-                    tfsec terraform/bootstrap --soft-fail --format json --out reports/tfsec-bootstrap.json
-                    tfsec ${TF_DIR}
-                    tfsec terraform/bootstrap
+                    tfsec ${TF_DIR} --no-colour --tfvars-file ${TF_DIR}/dev.tfvars --soft-fail --format json --out reports/tfsec-dev.json
+                    tfsec terraform/bootstrap --no-colour --soft-fail --format json --out reports/tfsec-bootstrap.json
+                    tfsec ${TF_DIR} --no-colour --tfvars-file ${TF_DIR}/dev.tfvars
+                    tfsec terraform/bootstrap --no-colour
                 '''
             }
         }
