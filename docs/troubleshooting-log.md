@@ -151,3 +151,31 @@ Every Jenkins build reported `SUCCESS`, but `Stage "Push" skipped due to when co
 ### Prevention
 - Control-plane access (Ansible, SSH) now goes over SSM Session Manager — no client IP involved, so it cannot go stale. Only the three browser UIs (Jenkins, Prometheus, Grafana) still depend on the allowlist.
 - The tfvars comment records the observations and the reasoning so the next widening is evidence-based, not a guess.
+
+---
+
+## Incident 7: New IaC security gate failed the build on its own author's code
+
+**Date:** 2026-09-23
+
+### Symptom
+The first pipeline run after adding the `IaC Security Scan` stage failed with `33 passed, 7 potential problem(s) detected` in `terraform/environments/dev` (a further 3 in `terraform/bootstrap` were never reached). Every downstream stage was skipped; nothing was built or deployed.
+
+### Investigation
+tfsec 1.28.14 findings, by root cause:
+- 2× HIGH root volume not encrypted — the Jenkins and k3s hosts, imported into Terraform as they were built by hand.
+- 1× HIGH subnet auto-assigns public IPs; 1× MEDIUM no VPC flow logs — the default VPC, also imported.
+- 3× HIGH IAM wildcards in `crra-jenkins-ci` — the policy written *this phase* for the keyless instance role: `ec2:Describe*` on `*`, and `ssm:TerminateSession` on `arn:aws:ssm:*:*:session/*`.
+- bootstrap: state bucket without CMK / access logging, lock table on the default KMS key.
+
+The gate had caught the same phase's new code, which is the point of having it.
+
+### Resolution
+Each finding was either fixed or accepted with a written reason next to the resource — never silenced globally.
+- **Fixed:** `map_public_ip_on_launch = false` (the hosts use explicit EIPs; the throwaway test instance sets `associate_public_ip_address` itself); VPC flow logs to CloudWatch Logs, 30-day retention, via a scoped role; SSM session lifecycle ARN narrowed from `*:*` to this account and region; test instance root volume encrypted.
+- **Accepted (`#tfsec:ignore` with reason):** root-volume encryption on the two live hosts — settable only at launch, so the fix is a replacement that loses Jenkins jobs/credentials and k3s node state; `ec2:Describe*` on `*` — EC2 Describe calls do not support resource-level permissions; CMK/access-logging on the state bucket and lock table — no change in who can read them, only cost and key policies to run.
+- Verified locally before pushing: both roots `No problems detected!` (dev 39 passed / 6 ignored; bootstrap 10 / 3), `terraform plan` = 4 to add, 2 to change, 0 to destroy.
+
+### Prevention
+- tfsec runs with `--no-colour` (the Jenkins console has no ANSI renderer) and `--tfvars-file` so findings read cleanly and reflect the real variable values.
+- Accepted risks live beside the code they describe, so a reviewer sees the reasoning in the same diff as any change to that resource.

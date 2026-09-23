@@ -229,6 +229,9 @@ data "aws_iam_policy_document" "jenkins_ci" {
   }
 
   # Terraform plan refreshes every managed resource; these are read-only.
+  # EC2 Describe* calls do not support resource-level permissions, so "*" is
+  # the only valid resource, and plan needs the whole Describe family.
+  #tfsec:ignore:aws-iam-no-policy-wildcards
   statement {
     sid = "TerraformPlanRead"
     actions = [
@@ -266,10 +269,12 @@ data "aws_iam_policy_document" "jenkins_ci" {
     actions   = ["ssm:StartSession"]
     resources = ["arn:aws:ssm:${data.aws_region.current.name}::document/AWS-StartSSHSession"]
   }
+  # Session IDs are generated when a session starts, so the ARN can only be
+  # scoped to this account and region, not to a named session.
   statement {
     sid       = "AnsibleSessionLifecycle"
     actions   = ["ssm:TerminateSession", "ssm:ResumeSession"]
-    resources = ["arn:aws:ssm:*:*:session/*"]
+    resources = ["arn:aws:ssm:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:session/*"]
   }
 }
 

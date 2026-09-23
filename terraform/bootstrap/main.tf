@@ -38,6 +38,10 @@ locals {
 
 # --- State bucket -----------------------------------------------------------
 
+# Accepted risk: server access logging needs a second bucket to log into,
+# doubling the bootstrap footprint. State access is already recorded by
+# CloudTrail and every write is kept as an object version below.
+#tfsec:ignore:aws-s3-enable-bucket-logging
 resource "aws_s3_bucket" "state" {
   bucket = local.bucket_name
 
@@ -55,6 +59,10 @@ resource "aws_s3_bucket_versioning" "state" {
   }
 }
 
+# Accepted risk: SSE-S3 (AES256) encrypts state at rest; a customer-managed
+# KMS key adds a key policy and a monthly cost for no change in who can read
+# the bucket, which is governed by IAM and the TLS-only bucket policy.
+#tfsec:ignore:aws-s3-encryption-customer-key
 resource "aws_s3_bucket_server_side_encryption_configuration" "state" {
   bucket = aws_s3_bucket.state.id
 
@@ -103,6 +111,9 @@ resource "aws_s3_bucket_policy" "state_tls_only" {
 
 # --- Lock table -------------------------------------------------------------
 
+# Accepted risk: the table holds only lock IDs and digests, encrypted with
+# the AWS-owned key; a customer key protects nothing extra here.
+#tfsec:ignore:aws-dynamodb-table-customer-key
 resource "aws_dynamodb_table" "lock" {
   name         = local.table_name
   billing_mode = "PAY_PER_REQUEST"

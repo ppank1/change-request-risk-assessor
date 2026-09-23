@@ -25,6 +25,10 @@ locals {
   }
 }
 
+# Accepted risk: this host was imported unencrypted, and root-volume
+# encryption can only be set at launch, so the fix replaces the instance and
+# loses its Jenkins jobs/credentials. Revisit when Ansible recreates those.
+#tfsec:ignore:aws-ec2-enable-at-rest-encryption
 resource "aws_instance" "jenkins" {
   ami                    = var.ami_id
   instance_type          = var.jenkins.instance_type
@@ -53,6 +57,9 @@ resource "aws_instance" "jenkins" {
   tags = { Name = var.jenkins.name, Role = "jenkins" }
 }
 
+# Accepted risk: same as the Jenkins host -- imported unencrypted; the fix is
+# a replacement, which would rebuild the cluster and lose the k3s node state.
+#tfsec:ignore:aws-ec2-enable-at-rest-encryption
 resource "aws_instance" "k3s" {
   ami                    = var.ami_id
   instance_type          = var.k3s.instance_type
@@ -119,6 +126,8 @@ resource "aws_instance" "test" {
   key_name               = aws_key_pair.this.key_name
   iam_instance_profile   = var.instance_profile_name
   ebs_optimized          = true
+  # No EIP for a throwaway host; it still needs egress for apt via the IGW.
+  associate_public_ip_address = true
 
   user_data = templatefile("${path.module}/templates/user_data.sh.tftpl", {
     role     = "test"
@@ -135,6 +144,7 @@ resource "aws_instance" "test" {
   root_block_device {
     volume_size           = 10
     volume_type           = "gp3"
+    encrypted             = true
     delete_on_termination = true
   }
 
