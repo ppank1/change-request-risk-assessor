@@ -28,9 +28,23 @@ echo "Image pinned to ${IMAGE}."
 echo "Waiting for deployment to be ready..."
 kubectl rollout status deployment/crra -n crra-dev --timeout=120s
 
-# Verify health
+# Verify health through the Service, the same path real clients take.
+# (exec-ing into "the first pod" raced the rolling update: right after a
+# rollout that pod is often the OLD one still terminating -> exit 137.)
 echo "Verifying health endpoint..."
-POD=$(kubectl get pods -n crra-dev -l app=crra -o jsonpath='{.items[0].metadata.name}')
-kubectl exec -n crra-dev "$POD" -- python -c "import urllib.request; print(urllib.request.urlopen('http://localhost:5000/health').read().decode())"
+kubectl run crra-healthcheck -n crra-dev --rm -i --restart=Never --quiet \
+  --image="${IMAGE}" --command -- \
+  python -c "import urllib.request; print(urllib.request.urlopen('http://crra-service:5000/health', timeout=5).read().decode())"
+
+# Every pod behind the Service must be on the image we just deployed.
+echo "Running pods:"
+kubectl get pods -n crra-dev -l app=crra --field-selector=status.phase=Running \
+  -o custom-columns='POD:.metadata.name,IMAGE:.spec.containers[0].image,READY:.status.containerStatuses[0].ready'
+STALE=$(kubectl get pods -n crra-dev -l app=crra --field-selector=status.phase=Running \
+  -o jsonpath='{.items[*].spec.containers[0].image}' | tr ' ' '\n' | grep -vc "^${IMAGE}$" || true)
+if [ "${STALE}" != "0" ]; then
+  echo "ERROR: ${STALE} running pod(s) are not on ${IMAGE}" >&2
+  exit 1
+fi
 
 echo "=== Deployment complete ==="
