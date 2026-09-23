@@ -107,7 +107,16 @@ pipeline {
 
         stage('Ansible Lint') {
             steps {
-                sh 'cd ansible && ansible-lint --version && ansible-lint --profile production'
+                // ansible.cfg names ~/.crra-vault-pass for operators; lint
+                // never decrypts anything, so give it a placeholder rather
+                // than the real secret. The env var overrides the cfg key.
+                sh '''
+                    cd ansible
+                    echo lint-placeholder > "${WORKSPACE}/reports/.lint-vault-pass"
+                    export ANSIBLE_VAULT_PASSWORD_FILE="${WORKSPACE}/reports/.lint-vault-pass"
+                    ansible-lint --version
+                    ansible-lint --profile production
+                '''
             }
         }
 
