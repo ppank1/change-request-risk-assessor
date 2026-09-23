@@ -23,7 +23,8 @@ spec:
       containers:
         - name: crra
           # Tag is a placeholder: the pipeline pins the exact commit-SHA image
-          # with `kubectl set image` on every deploy. Never ':latest'.
+          # (docker.io/<hub-user>/crra:<sha>) with `kubectl set image` on every
+          # deploy. Never ':latest'.
           image: docker.io/crra:set-by-pipeline
           imagePullPolicy: IfNotPresent
           ports:

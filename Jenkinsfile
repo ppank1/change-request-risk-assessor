@@ -11,6 +11,8 @@ pipeline {
         // Images are tagged by commit SHA so a running pod is traceable to the
         // exact code that built it. ':latest' is never produced or deployed.
         IMAGE_TAG = "${env.GIT_COMMIT.take(12)}"
+        // Docker Hub credential; its username is also the image namespace,
+        // so the pushed image is docker.io/<user>/crra:<sha>.
         DOCKER_CREDENTIALS = credentials('docker-registry-credentials')
     }
 
@@ -55,29 +57,31 @@ pipeline {
 
         stage('Docker Build') {
             steps {
-                sh "docker build -t ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} ."
+                sh "docker build -t ${REGISTRY}/${DOCKER_CREDENTIALS_USR}/${IMAGE_NAME}:${IMAGE_TAG} ."
             }
         }
 
         stage('Trivy Scan') {
             steps {
-                sh "trivy image --exit-code 0 --severity HIGH,CRITICAL --format json -o reports/trivy-report.json ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
+                sh "trivy image --exit-code 0 --severity HIGH,CRITICAL --format json -o reports/trivy-report.json ${REGISTRY}/${DOCKER_CREDENTIALS_USR}/${IMAGE_NAME}:${IMAGE_TAG}"
             }
         }
 
+        // `branch 'main'` only evaluates in Multibranch jobs. A plain Pipeline
+        // job reports the branch as GIT_BRANCH=origin/main, so check both.
         stage('Push') {
             when {
-                branch 'main'
+                expression { (env.BRANCH_NAME ?: env.GIT_BRANCH ?: '').endsWith('main') }
             }
             steps {
                 sh "echo ${DOCKER_CREDENTIALS_PSW} | docker login ${REGISTRY} -u ${DOCKER_CREDENTIALS_USR} --password-stdin"
-                sh "docker push ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
+                sh "docker push ${REGISTRY}/${DOCKER_CREDENTIALS_USR}/${IMAGE_NAME}:${IMAGE_TAG}"
             }
         }
 
         stage('Deploy') {
             when {
-                branch 'main'
+                expression { (env.BRANCH_NAME ?: env.GIT_BRANCH ?: '').endsWith('main') }
             }
             steps {
                 sh 'kubectl apply -f k8s/namespace.yaml'
@@ -85,7 +89,7 @@ pipeline {
                 sh 'kubectl apply -f k8s/deployment.yaml'
                 sh 'kubectl apply -f k8s/service.yaml'
                 // Pin the deployment to the image built from this exact commit.
-                sh "kubectl set image deployment/crra crra=${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} -n crra-dev"
+                sh "kubectl set image deployment/crra crra=${REGISTRY}/${DOCKER_CREDENTIALS_USR}/${IMAGE_NAME}:${IMAGE_TAG} -n crra-dev"
                 sh 'kubectl rollout status deployment/crra -n crra-dev --timeout=120s'
             }
         }

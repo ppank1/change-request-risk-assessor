@@ -1,10 +1,9 @@
 #!/bin/bash
 # Deploy CRRA to Kubernetes.
-# Usage: scripts/deploy.sh <image-tag>   (tag = commit SHA the image was built from)
+# Usage: scripts/deploy.sh <image>   e.g. docker.io/<hub-user>/crra:<commit-sha>
 set -e
 
-IMAGE_TAG="${1:?usage: deploy.sh <image-tag> -- the commit SHA the image was built from}"
-IMAGE="docker.io/crra:${IMAGE_TAG}"
+IMAGE="${1:?usage: deploy.sh <image> -- full reference incl. the commit-SHA tag}"
 
 echo "=== Deploying CRRA ${IMAGE} ==="
 
