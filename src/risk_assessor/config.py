@@ -14,7 +14,9 @@ class Config:
         self.high_risk_threshold = int(os.environ.get("HIGH_RISK_THRESHOLD", "60"))
         self.critical_risk_threshold = int(os.environ.get("CRITICAL_RISK_THRESHOLD", "80"))
         self.log_level = os.environ.get("LOG_LEVEL", "INFO")
-        self.enable_metrics = os.environ.get("ENABLE_METRICS", "true").lower() == "true"
+        # Off by default: new code ships dark and is switched on per environment
+        # via the ConfigMap (branch by abstraction).
+        self.enable_metrics = os.environ.get("ENABLE_METRICS", "false").lower() == "true"
 
 
 def load_config() -> Config:

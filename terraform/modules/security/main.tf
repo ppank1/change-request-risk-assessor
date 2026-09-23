@@ -115,6 +115,17 @@ resource "aws_vpc_security_group_ingress_rule" "k3s_app_scrape_from_jenkins" {
   description       = "Prometheus scrape of the CRRA app"
 }
 
+# Prometheus scrapes node_exporter on the k3s host. Missing on first rollout:
+# the target showed DOWN with "i/o timeout" until this rule was added.
+resource "aws_vpc_security_group_ingress_rule" "k3s_node_exporter_from_jenkins" {
+  security_group_id = aws_security_group.k3s.id
+  ip_protocol       = "tcp"
+  from_port         = 9100
+  to_port           = 9100
+  cidr_ipv4         = "${var.jenkins_private_ip}/32"
+  description       = "Prometheus scrape of node_exporter"
+}
+
 resource "aws_vpc_security_group_egress_rule" "k3s_all" {
   security_group_id = aws_security_group.k3s.id
   ip_protocol       = "-1"

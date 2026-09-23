@@ -12,10 +12,13 @@
   hosts: role_jenkins
   vars:
     docker_users: [ubuntu, jenkins]
+    # Runs the monitoring role a second time here so tasks/server.yml
+    # (Prometheus + Grafana) executes; the baseline play only installs node_exporter.
     monitoring_server: true
   roles:
     - docker
     - jenkins
+    - monitoring
 
 - name: K3s host
   hosts: role_k3s

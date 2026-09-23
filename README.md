@@ -104,7 +104,7 @@ All configuration is via environment variables:
 | HIGH_RISK_THRESHOLD | 60 | Score threshold for HIGH risk |
 | CRITICAL_RISK_THRESHOLD | 80 | Score threshold for CRITICAL risk |
 | LOG_LEVEL | INFO | Application log level |
-| ENABLE_METRICS | true | Expose Prometheus metrics at /metrics |
+| ENABLE_METRICS | false | Expose Prometheus metrics at /metrics (enabled via ConfigMap in k8s) |
 
 ## Contributing
 

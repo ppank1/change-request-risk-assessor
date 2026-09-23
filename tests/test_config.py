@@ -9,7 +9,8 @@ def test_default_config():
     """Defaults should be loaded when no env vars are set."""
     # Clear any existing env vars
     env_vars = ["SCORING_STRATEGY", "ENABLE_BLAST_RADIUS_CHECK", "ENABLE_TIME_WINDOW_CHECK",
-                "ENABLE_ROLLBACK_CHECK", "HIGH_RISK_THRESHOLD", "CRITICAL_RISK_THRESHOLD", "LOG_LEVEL"]
+                "ENABLE_ROLLBACK_CHECK", "HIGH_RISK_THRESHOLD", "CRITICAL_RISK_THRESHOLD", "LOG_LEVEL",
+                "ENABLE_METRICS"]
     original = {k: os.environ.pop(k, None) for k in env_vars}
 
     try:
@@ -21,6 +22,7 @@ def test_default_config():
         assert config.high_risk_threshold == 60
         assert config.critical_risk_threshold == 80
         assert config.log_level == "INFO"
+        assert config.enable_metrics is False
     finally:
         for k, v in original.items():
             if v is not None:
