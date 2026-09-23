@@ -35,8 +35,9 @@ variable "admin_cidrs" {
 }
 
 variable "jenkins_agent_cidr" {
-  type    = string
-  default = "0.0.0.0/0"
+  description = "Source CIDR allowed to reach the Jenkins JNLP agent port (50000). null = no agents, port closed."
+  type        = string
+  default     = null
 }
 
 # compute

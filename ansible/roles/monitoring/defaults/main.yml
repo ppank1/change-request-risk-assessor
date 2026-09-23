@@ -31,4 +31,4 @@ monitoring_grafana_repo_key_url: https://apt.grafana.com/gpg.key
 monitoring_grafana_keyring: /etc/apt/keyrings/grafana.gpg
 monitoring_grafana_repo: "deb [signed-by={{ monitoring_grafana_keyring }}] https://apt.grafana.com stable main"
 monitoring_grafana_admin_user: admin
-monitoring_grafana_admin_password: "{{ vault_grafana_admin_password }}"
+monitoring_grafana_admin_password: "{{ grafana_admin_password }}"

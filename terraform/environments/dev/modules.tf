@@ -18,6 +18,10 @@ module "security" {
   # and lock it for `terraform plan`. Same names as backend.tf.
   tfstate_bucket_arn     = "arn:aws:s3:::crra-tfstate-${data.aws_caller_identity.current.account_id}"
   tfstate_lock_table_arn = "arn:aws:dynamodb:${var.region}:${data.aws_caller_identity.current.account_id}:table/crra-tfstate-lock"
+
+  # Runtime secrets (secrets.tf): the CI role may read these and nothing else.
+  secret_parameter_arns = [for p in data.aws_ssm_parameter.secret : p.arn]
+  secrets_kms_key_arn   = data.aws_kms_alias.ssm.target_key_arn
 }
 
 module "compute" {

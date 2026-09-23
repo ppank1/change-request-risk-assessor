@@ -79,6 +79,28 @@ A lock survives its holder only when the process died mid-run (laptop closed, SS
 
 `force-unlock` is safe when the holder is dead. It is **never** safe while an apply is running: the next operator's writes would interleave with the live run and the state file can end up describing neither. If in doubt, wait — a stale lock costs minutes; a corrupted state costs an afternoon with S3 versions.
 
+## Secrets
+
+Runtime secrets live in **SSM Parameter Store as SecureString**, under `/crra/<env>/`. Nothing secret is in git, in Terraform state (Terraform reads them without decryption), in an Ansible vault file, or in a Jenkins credential. The only Jenkins credentials are the Docker Hub login and the SSH key.
+
+| Parameter | Consumer |
+|---|---|
+| `/crra/dev/grafana/admin_password` | `monitoring` role → `grafana.ini` (first start only; rotate with `grafana-cli admin reset-admin-password`) |
+| `/crra/dev/app/api_token` | `common` role → `/etc/crra/environment` |
+
+**Create or rotate** (operator, admin credentials):
+
+```bash
+aws ssm put-parameter --region us-west-2 --type SecureString --overwrite \
+  --name /crra/dev/grafana/admin_password --value "$(openssl rand -base64 24)"
+```
+
+Then `ansible-playbook playbooks/site.yml` to push the new value to the hosts. `terraform plan` for the environment must show `No changes` afterwards — Terraform tracks the parameter's ARN and type, never its value.
+
+**Who can read them.** Ansible resolves each secret with `lookup('amazon.aws.aws_ssm', ...)` using whatever identity runs the playbook: an operator's `ada` credentials from a devdesk, or the Jenkins host's instance role in the pipeline. The CI role is granted `ssm:GetParameter` on exactly these ARNs and `kms:Decrypt` on the SSM key only via SSM (`kms:ViaService`) — see `terraform/environments/dev/secrets.tf` and the `ReadRuntimeSecrets` statement in the security module. It cannot `PutParameter`.
+
+**Adding a secret:** add it to `local.secret_parameters` in `secrets.tf` (Terraform then fails the plan until the parameter exists and is a SecureString), create it with `put-parameter`, reference it in `group_vars/all/vars.yml`, mark the consuming task `no_log: true`.
+
 ## Routine checks
 
 | Check | Command | Expect |

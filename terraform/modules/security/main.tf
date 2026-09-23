@@ -38,12 +38,17 @@ resource "aws_vpc_security_group_ingress_rule" "jenkins_ui" {
 
 # JNLP agent port. Found open to the world on import; tightening it is a
 # deliberate follow-up change, not part of the import.
+# JNLP agent port. Only created when an agent CIDR is given: this Jenkins has
+# no build agents (the controller runs every stage), so the port stays closed.
 resource "aws_vpc_security_group_ingress_rule" "jenkins_agent" {
+  count = var.jenkins_agent_cidr == null ? 0 : 1
+
   security_group_id = aws_security_group.jenkins.id
   ip_protocol       = "tcp"
   from_port         = 50000
   to_port           = 50000
   cidr_ipv4         = var.jenkins_agent_cidr
+  description       = "Jenkins inbound agents (JNLP)"
 }
 
 resource "aws_vpc_security_group_egress_rule" "jenkins_all" {
@@ -278,6 +283,30 @@ data "aws_iam_policy_document" "jenkins_ci" {
     sid       = "AnsibleSessionLifecycle"
     actions   = ["ssm:TerminateSession", "ssm:ResumeSession"]
     resources = ["arn:aws:ssm:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:session/*"]
+  }
+  # Runtime secrets for the Configuration Management stage: read exactly the
+  # named parameters, decrypt with the SSM key only. No PutParameter -- the
+  # pipeline consumes secrets, operators rotate them.
+  dynamic "statement" {
+    for_each = length(var.secret_parameter_arns) > 0 ? [1] : []
+    content {
+      sid       = "ReadRuntimeSecrets"
+      actions   = ["ssm:GetParameter", "ssm:GetParameters"]
+      resources = var.secret_parameter_arns
+    }
+  }
+  dynamic "statement" {
+    for_each = length(var.secret_parameter_arns) > 0 ? [1] : []
+    content {
+      sid       = "DecryptRuntimeSecrets"
+      actions   = ["kms:Decrypt"]
+      resources = [var.secrets_kms_key_arn]
+      condition {
+        test     = "StringEquals"
+        variable = "kms:ViaService"
+        values   = ["ssm.${data.aws_region.current.name}.amazonaws.com"]
+      }
+    }
   }
 }
 

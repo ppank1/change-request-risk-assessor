@@ -107,16 +107,7 @@ pipeline {
 
         stage('Ansible Lint') {
             steps {
-                // ansible.cfg names ~/.crra-vault-pass for operators; lint
-                // never decrypts anything, so give it a placeholder rather
-                // than the real secret. The env var overrides the cfg key.
-                sh '''
-                    cd ansible
-                    echo lint-placeholder > "${WORKSPACE}/reports/.lint-vault-pass"
-                    export ANSIBLE_VAULT_PASSWORD_FILE="${WORKSPACE}/reports/.lint-vault-pass"
-                    ansible-lint --version
-                    ansible-lint --profile production
-                '''
+                sh 'cd ansible && ansible-lint --version && ansible-lint --profile production'
             }
         }
 
@@ -157,8 +148,10 @@ pipeline {
                 expression { (env.BRANCH_NAME ?: env.GIT_BRANCH ?: '').endsWith('main') }
             }
             steps {
-                sh "echo ${DOCKER_CREDENTIALS_PSW} | docker login ${REGISTRY} -u ${DOCKER_CREDENTIALS_USR} --password-stdin"
-                sh "docker push ${REGISTRY}/${DOCKER_CREDENTIALS_USR}/${IMAGE_NAME}:${IMAGE_TAG}"
+                // Single-quoted: the shell reads the secret from its environment,
+                // so it is never interpolated into the script text or the log.
+                sh 'echo "$DOCKER_CREDENTIALS_PSW" | docker login "$REGISTRY" -u "$DOCKER_CREDENTIALS_USR" --password-stdin'
+                sh 'docker push "$REGISTRY/$DOCKER_CREDENTIALS_USR/$IMAGE_NAME:$IMAGE_TAG"'
             }
         }
 
@@ -179,11 +172,11 @@ pipeline {
             }
             steps {
                 // Converges both hosts with the same playbook operators run by
-                // hand. The vault password and SSH key come from Jenkins
-                // Credentials as temporary files; env vars override the
-                // ~/.crra-vault-pass and ~/.ssh paths in ansible.cfg.
+                // hand. Runtime secrets are read from SSM Parameter Store with
+                // the host's instance role (no vault file, no Jenkins secret);
+                // only the SSH key comes from Jenkins Credentials, as a temp
+                // file whose path overrides the ~/.ssh path in ansible.cfg.
                 withCredentials([
-                    file(credentialsId: 'crra-vault-password', variable: 'ANSIBLE_VAULT_PASSWORD_FILE'),
                     sshUserPrivateKey(credentialsId: 'crra-ssh-key', keyFileVariable: 'ANSIBLE_PRIVATE_KEY_FILE')
                 ]) {
                     sh '''#!/usr/bin/env bash

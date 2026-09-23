@@ -28,8 +28,9 @@
     group: root
     mode: "0750"
 
-# Consumes a vaulted variable. no_log keeps the value out of playbook output.
-- name: Write CRRA environment file from vaulted secret
+# The token is read from SSM Parameter Store at run time. no_log keeps the
+# value out of playbook output.
+- name: Write CRRA environment file from SSM secret
   ansible.builtin.template:
     src: environment.j2
     dest: /etc/crra/environment

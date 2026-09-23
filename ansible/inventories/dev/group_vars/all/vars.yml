@@ -20,5 +20,12 @@ monitoring_node_exporter_port: 9100
 prometheus_port: 9090
 grafana_port: 3000
 
-# Secrets consumed from vault.yml
-grafana_admin_password: "{{ vault_grafana_admin_password }}"
+# Secrets: SSM Parameter Store SecureStrings, created once by an operator
+# (docs/runbook.md "Secrets"). Resolved on the controller at run time with
+# its own AWS identity -- the Jenkins host's instance role in the pipeline,
+# the operator's credentials from a devdesk -- so no secret is in this repo,
+# in a vault file, or in a Jenkins credential. Terraform grants the CI role
+# read access to exactly these parameter ARNs (terraform/environments/dev/secrets.tf).
+crra_ssm_secret_prefix: "/{{ project }}/{{ environment_name }}"
+grafana_admin_password: "{{ lookup('amazon.aws.aws_ssm', crra_ssm_secret_prefix ~ '/grafana/admin_password', region=aws_region) }}"
+crra_api_token: "{{ lookup('amazon.aws.aws_ssm', crra_ssm_secret_prefix ~ '/app/api_token', region=aws_region) }}"

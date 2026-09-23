@@ -27,9 +27,9 @@ variable "admin_cidrs" {
 }
 
 variable "jenkins_agent_cidr" {
-  description = "Source CIDR allowed to reach the Jenkins JNLP agent port (50000)."
+  description = "Source CIDR allowed to reach the Jenkins JNLP agent port (50000). null = no agents, port closed."
   type        = string
-  default     = "0.0.0.0/0"
+  default     = null
 }
 
 variable "jenkins_private_ip" {
@@ -45,4 +45,16 @@ variable "tfstate_bucket_arn" {
 variable "tfstate_lock_table_arn" {
   description = "ARN of the DynamoDB lock table the Jenkins CI role may lock."
   type        = string
+}
+
+variable "secret_parameter_arns" {
+  description = "SSM SecureString parameter ARNs the Jenkins CI role may read. Empty disables the statements."
+  type        = list(string)
+  default     = []
+}
+
+variable "secrets_kms_key_arn" {
+  description = "KMS key that encrypts the parameters above (the SSM default key). Required when secret_parameter_arns is non-empty."
+  type        = string
+  default     = null
 }

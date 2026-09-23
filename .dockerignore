@@ -1,0 +1,8 @@
+# The Dockerfile copies requirements.txt, setup.py and src/ only. Everything
+# else is noise in the build context (it was 1.46 GB: the pipeline's venv,
+# Terraform provider caches, Ansible collections) and some of it is sensitive.
+*
+!requirements.txt
+!setup.py
+!src/
+src/**/__pycache__/
