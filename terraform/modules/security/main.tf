@@ -244,6 +244,9 @@ data "aws_iam_policy_document" "jenkins_ci" {
       "iam:ListRolePolicies",
       "iam:ListAttachedRolePolicies",
       "iam:ListInstanceProfilesForRole",
+      # VPC flow-log group; DescribeLogGroups has no resource-level scope.
+      "logs:DescribeLogGroups",
+      "logs:ListTagsForResource",
     ]
     resources = ["*"]
   }
