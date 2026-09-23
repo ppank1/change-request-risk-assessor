@@ -1,0 +1,33 @@
+---
+- name: Harden sshd via drop-in
+  ansible.builtin.template:
+    src: 99-crra-hardening.conf.j2
+    dest: /etc/ssh/sshd_config.d/99-crra-hardening.conf
+    owner: root
+    group: root
+    mode: "0644"
+    validate: "sshd -t -f %s"
+  notify: Restart sshd
+
+- name: Install fail2ban
+  ansible.builtin.apt:
+    name: fail2ban
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  when: hardening_fail2ban_enabled
+
+- name: Enable fail2ban
+  ansible.builtin.systemd:
+    name: fail2ban
+    enabled: true
+    state: started
+  when: hardening_fail2ban_enabled
+
+- name: Apply kernel network hardening
+  ansible.posix.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    sysctl_file: /etc/sysctl.d/99-crra-hardening.conf
+    reload: true
+  loop: "{{ hardening_sysctl | dict2items }}"

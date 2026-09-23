@@ -1,0 +1,17 @@
+[Unit]
+Description=Prometheus
+After=network-online.target
+
+[Service]
+User={{ monitoring_prometheus_user }}
+ExecStart=/usr/local/bin/prometheus \
+  --config.file=/etc/prometheus/prometheus.yml \
+  --storage.tsdb.path=/var/lib/prometheus \
+  --storage.tsdb.retention.time={{ monitoring_prometheus_retention }} \
+  --web.listen-address=:{{ monitoring_prometheus_port }} \
+  --web.enable-lifecycle
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

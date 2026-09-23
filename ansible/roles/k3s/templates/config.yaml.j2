@@ -1,0 +1,7 @@
+# Managed by Ansible (roles/k3s).
+# Advertise on the private IP: Jenkins reaches the API over the VPC, and the
+# private IP is stable across stop/start.
+node-ip: {{ private_ip }}
+tls-san:
+  - {{ private_ip }}
+write-kubeconfig-mode: "0644"

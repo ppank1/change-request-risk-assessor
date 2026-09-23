@@ -13,6 +13,7 @@ setup(
     install_requires=[
         "flask==3.0.0",
         "gunicorn==21.2.0",
+        "prometheus_client==0.20.0",
     ],
     extras_require={
         "dev": [

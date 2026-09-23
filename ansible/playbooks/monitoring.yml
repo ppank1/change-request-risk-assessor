@@ -1,0 +1,12 @@
+---
+- name: Monitoring on every host
+  hosts: crra
+  roles:
+    - monitoring
+
+- name: Monitoring server
+  hosts: role_jenkins
+  vars:
+    monitoring_server: true
+  roles:
+    - monitoring

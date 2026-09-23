@@ -1,0 +1,23 @@
+---
+# Full convergence of every CRRA host. Idempotent: a second run reports changed=0.
+
+- name: Baseline every host
+  hosts: crra
+  roles:
+    - common
+    - hardening
+    - monitoring
+
+- name: Jenkins host
+  hosts: role_jenkins
+  vars:
+    docker_users: [ubuntu, jenkins]
+    monitoring_server: true
+  roles:
+    - docker
+    - jenkins
+
+- name: K3s host
+  hosts: role_k3s
+  roles:
+    - k3s

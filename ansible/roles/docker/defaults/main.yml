@@ -1,0 +1,8 @@
+---
+docker_package: docker.io
+docker_users: []
+docker_daemon_config:
+  log-driver: json-file
+  log-opts:
+    max-size: "10m"
+    max-file: "3"

@@ -1,0 +1,8 @@
+---
+- name: Jenkins host
+  hosts: role_jenkins
+  vars:
+    docker_users: [ubuntu, jenkins]
+  roles:
+    - docker
+    - jenkins

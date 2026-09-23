@@ -1,0 +1,24 @@
+---
+# Static, non-secret configuration for every CRRA host.
+# Secrets live in vault.yml (ansible-vault encrypted) and are referenced here
+# by name so a plain-text grep of this file never shows a secret value.
+
+project: crra
+environment_name: dev
+aws_region: us-west-2
+
+# Elastic IPs are the only stable public addresses; read from Terraform output
+# and set here once. Never a raw auto-assigned public IP.
+jenkins_public_ip: "44.246.87.255"
+k3s_public_ip: "34.217.248.68"
+jenkins_url: "http://{{ jenkins_public_ip }}:8080/"
+
+# Ports
+jenkins_port: 8080
+k3s_api_port: 6443
+monitoring_node_exporter_port: 9100
+prometheus_port: 9090
+grafana_port: 3000
+
+# Secrets consumed from vault.yml
+grafana_admin_password: "{{ vault_grafana_admin_password }}"

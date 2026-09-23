@@ -1,0 +1,5 @@
+---
+- name: Harden every host
+  hosts: crra
+  roles:
+    - hardening

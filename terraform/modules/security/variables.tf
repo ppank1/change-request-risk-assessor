@@ -1,0 +1,32 @@
+variable "vpc_id" {
+  type = string
+}
+
+variable "jenkins_sg_name" {
+  type    = string
+  default = "crra-jenkins-sg"
+}
+
+variable "k3s_sg_name" {
+  type    = string
+  default = "crra-k3s-sg"
+}
+
+variable "admin_cidrs" {
+  description = "Client CIDRs allowed SSH, Jenkins UI and k3s NodePort access. Key is a stable label used in state addresses."
+  type = map(object({
+    cidr        = string
+    description = optional(string)
+  }))
+}
+
+variable "jenkins_agent_cidr" {
+  description = "Source CIDR allowed to reach the Jenkins JNLP agent port (50000)."
+  type        = string
+  default     = "0.0.0.0/0"
+}
+
+variable "jenkins_private_ip" {
+  description = "Private IP of the Jenkins host, the only source allowed to reach the k3s API."
+  type        = string
+}

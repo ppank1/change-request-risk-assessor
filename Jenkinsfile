@@ -8,7 +8,9 @@ pipeline {
     environment {
         REGISTRY = 'docker.io'
         IMAGE_NAME = 'crra'
-        IMAGE_TAG = "${BUILD_NUMBER}"
+        // Images are tagged by commit SHA so a running pod is traceable to the
+        // exact code that built it. ':latest' is never produced or deployed.
+        IMAGE_TAG = "${env.GIT_COMMIT.take(12)}"
         DOCKER_CREDENTIALS = credentials('docker-registry-credentials')
     }
 
@@ -54,7 +56,6 @@ pipeline {
         stage('Docker Build') {
             steps {
                 sh "docker build -t ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} ."
-                sh "docker tag ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} ${REGISTRY}/${IMAGE_NAME}:latest"
             }
         }
 
@@ -71,7 +72,6 @@ pipeline {
             steps {
                 sh "echo ${DOCKER_CREDENTIALS_PSW} | docker login ${REGISTRY} -u ${DOCKER_CREDENTIALS_USR} --password-stdin"
                 sh "docker push ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
-                sh "docker push ${REGISTRY}/${IMAGE_NAME}:latest"
             }
         }
 
@@ -84,6 +84,8 @@ pipeline {
                 sh 'kubectl apply -f k8s/configmap.yaml'
                 sh 'kubectl apply -f k8s/deployment.yaml'
                 sh 'kubectl apply -f k8s/service.yaml'
+                // Pin the deployment to the image built from this exact commit.
+                sh "kubectl set image deployment/crra crra=${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} -n crra-dev"
                 sh 'kubectl rollout status deployment/crra -n crra-dev --timeout=120s'
             }
         }

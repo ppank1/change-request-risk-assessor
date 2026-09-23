@@ -4,10 +4,13 @@ metadata:
   name: crra-service
   namespace: crra-dev
 spec:
-  type: ClusterIP
+  # NodePort so Prometheus (on the Jenkins host) can scrape /metrics at
+  # <k3s-private-ip>:30000. The security group restricts who can reach it.
+  type: NodePort
   selector:
     app: crra
   ports:
     - protocol: TCP
       port: 5000
       targetPort: 5000
+      nodePort: 30000

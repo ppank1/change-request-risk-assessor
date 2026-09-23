@@ -1,0 +1,56 @@
+---
+- name: Install k3s (skipped when already installed)
+  ansible.builtin.shell: |
+    set -o pipefail
+    curl -sfL {{ k3s_install_url }} | sh -
+  args:
+    creates: /usr/local/bin/k3s
+    executable: /bin/bash
+
+- name: Ensure k3s config directory exists
+  ansible.builtin.file:
+    path: "{{ k3s_config_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Write k3s config
+  ansible.builtin.template:
+    src: config.yaml.j2
+    dest: "{{ k3s_config_dir }}/config.yaml"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart k3s
+
+- name: Enable and start k3s
+  ansible.builtin.systemd:
+    name: k3s
+    enabled: true
+    state: started
+
+- name: Wait for the Kubernetes API
+  ansible.builtin.wait_for:
+    port: 6443
+    host: 127.0.0.1
+    timeout: 120
+
+- name: Ensure ~/.kube exists for kubeconfig users
+  ansible.builtin.file:
+    path: "/home/{{ item }}/.kube"
+    state: directory
+    owner: "{{ item }}"
+    group: "{{ item }}"
+    mode: "0700"
+  loop: "{{ k3s_kubeconfig_users }}"
+
+- name: Copy kubeconfig for users
+  ansible.builtin.copy:
+    src: "{{ k3s_config_dir }}/k3s.yaml"
+    dest: "/home/{{ item }}/.kube/config"
+    remote_src: true
+    owner: "{{ item }}"
+    group: "{{ item }}"
+    mode: "0600"
+  loop: "{{ k3s_kubeconfig_users }}"

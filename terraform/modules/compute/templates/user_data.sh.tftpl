@@ -1,0 +1,68 @@
+#!/bin/bash
+# Baseline bootstrap for every CRRA host. Runs once at first boot via cloud-init.
+# Brings a fresh instance to a known, verifiable state with no manual step:
+# patched, hardened defaults, node_exporter running, and an HTTP health marker
+# on :8000 so the instance can prove it configured itself.
+set -euo pipefail
+exec > >(tee /var/log/crra-bootstrap.log) 2>&1
+
+ROLE="${role}"
+HOSTNAME_TAG="${hostname}"
+NODE_EXPORTER_VERSION="1.8.2"
+
+echo "== crra bootstrap: role=$ROLE host=$HOSTNAME_TAG $(date -u +%FT%TZ)"
+
+hostnamectl set-hostname "$HOSTNAME_TAG"
+
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -y
+apt-get upgrade -y
+apt-get install -y curl jq unattended-upgrades python3 ufw
+
+# node_exporter (host metrics for Prometheus)
+if ! id node_exporter >/dev/null 2>&1; then
+  useradd --system --no-create-home --shell /usr/sbin/nologin node_exporter
+fi
+curl -fsSL "https://github.com/prometheus/node_exporter/releases/download/v$${NODE_EXPORTER_VERSION}/node_exporter-$${NODE_EXPORTER_VERSION}.linux-amd64.tar.gz" \
+  | tar -xz -C /tmp
+install -m 0755 "/tmp/node_exporter-$${NODE_EXPORTER_VERSION}.linux-amd64/node_exporter" /usr/local/bin/node_exporter
+cat > /etc/systemd/system/node_exporter.service <<'EOF'
+[Unit]
+Description=Prometheus Node Exporter
+After=network-online.target
+
+[Service]
+User=node_exporter
+ExecStart=/usr/local/bin/node_exporter
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl daemon-reload
+systemctl enable --now node_exporter
+
+# Health marker: a tiny static page that says who this host is and when it built itself.
+mkdir -p /var/www/crra-health
+cat > /var/www/crra-health/index.json <<EOF
+{"host":"$HOSTNAME_TAG","role":"$ROLE","bootstrapped_at":"$(date -u +%FT%TZ)","instance_id":"$(curl -s -H 'X-aws-ec2-metadata-token: '"$(curl -s -X PUT http://169.254.169.254/latest/api/token -H 'X-aws-ec2-metadata-token-ttl-seconds: 60')" http://169.254.169.254/latest/meta-data/instance-id)","status":"ok"}
+EOF
+# http.server serves index.html at "/", so expose the same JSON there too.
+ln -sf /var/www/crra-health/index.json /var/www/crra-health/index.html
+cat > /etc/systemd/system/crra-health.service <<'EOF'
+[Unit]
+Description=CRRA bootstrap health marker
+After=network-online.target
+
+[Service]
+WorkingDirectory=/var/www/crra-health
+ExecStart=/usr/bin/python3 -m http.server 8000 --bind 0.0.0.0
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl daemon-reload
+systemctl enable --now crra-health
+
+echo "== crra bootstrap complete $(date -u +%FT%TZ)"

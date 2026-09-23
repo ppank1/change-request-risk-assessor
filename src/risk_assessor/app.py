@@ -10,6 +10,7 @@ from flask import Flask, jsonify, request
 from risk_assessor import __version__
 from risk_assessor.assessor import assess_risk
 from risk_assessor.config import load_config
+from risk_assessor.metrics import record_assessment, register_metrics
 
 # Configure structured JSON logging
 handler = logging.StreamHandler(sys.stdout)
@@ -30,6 +31,9 @@ def create_app():
     config = load_config()
     logger.setLevel(getattr(logging, config.log_level, logging.INFO))
 
+    if config.enable_metrics:
+        register_metrics(app)
+
     @app.route("/health", methods=["GET"])
     def health():
         return jsonify({
@@ -46,6 +50,7 @@ def create_app():
         data = request.get_json()
         try:
             result = assess_risk(data)
+            record_assessment(app, result.risk_level)
             return jsonify(asdict(result)), 200
         except ValueError as e:
             logger.warning("Validation error: %s", str(e))

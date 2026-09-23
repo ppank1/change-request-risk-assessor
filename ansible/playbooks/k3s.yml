@@ -1,0 +1,5 @@
+---
+- name: K3s host
+  hosts: role_k3s
+  roles:
+    - k3s

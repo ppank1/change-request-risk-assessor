@@ -1,0 +1,10 @@
+---
+hardening_ssh_permit_root_login: "no"
+hardening_ssh_password_authentication: "no"
+hardening_ssh_max_auth_tries: 4
+hardening_fail2ban_enabled: true
+hardening_sysctl:
+  net.ipv4.conf.all.rp_filter: 1
+  net.ipv4.conf.all.accept_redirects: 0
+  net.ipv4.conf.all.send_redirects: 0
+  net.ipv4.tcp_syncookies: 1

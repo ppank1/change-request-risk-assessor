@@ -1,0 +1,75 @@
+---
+- name: Install Java
+  ansible.builtin.apt:
+    name: "{{ jenkins_java_package }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Ensure apt keyrings directory exists
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Add Jenkins apt signing key
+  ansible.builtin.get_url:
+    url: "{{ jenkins_repo_key_url }}"
+    dest: "{{ jenkins_keyring }}"
+    mode: "0644"
+
+# Written whole rather than appended (apt_repository) so a host that was set
+# up by hand with a different Signed-By path converges instead of ending up
+# with two conflicting lines for the same repository.
+- name: Add Jenkins apt repository
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/jenkins.list
+    content: "{{ jenkins_repo }}\n"
+    owner: root
+    group: root
+    mode: "0644"
+  register: jenkins_repo_file
+
+- name: Remove legacy keyring location if present
+  ansible.builtin.file:
+    path: /usr/share/keyrings/jenkins-keyring.asc
+    state: absent
+  when: jenkins_keyring != "/usr/share/keyrings/jenkins-keyring.asc"
+
+- name: Install Jenkins
+  ansible.builtin.apt:
+    name: jenkins
+    state: present
+    update_cache: "{{ jenkins_repo_file.changed | bool }}"
+
+- name: Add jenkins user to docker group
+  ansible.builtin.user:
+    name: jenkins
+    groups: docker
+    append: true
+  notify: Restart jenkins
+
+- name: Install kubectl
+  ansible.builtin.get_url:
+    url: "{{ jenkins_kubectl_url }}"
+    dest: /usr/local/bin/kubectl
+    mode: "0755"
+
+# The root URL lived only in the UI before and went stale when the public IP
+# changed. Owning it here means every run re-asserts the correct value.
+- name: Set Jenkins root URL
+  ansible.builtin.template:
+    src: jenkins.model.JenkinsLocationConfiguration.xml.j2
+    dest: "{{ jenkins_home }}/jenkins.model.JenkinsLocationConfiguration.xml"
+    owner: jenkins
+    group: jenkins
+    mode: "0644"
+  notify: Restart jenkins
+
+- name: Enable and start Jenkins
+  ansible.builtin.systemd:
+    name: jenkins
+    enabled: true
+    state: started

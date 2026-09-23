@@ -1,0 +1,34 @@
+---
+# Dynamic inventory: hosts are discovered from EC2 by tag every run.
+# No IP address is written anywhere in this repo, so instance restarts and
+# replacements can never leave the inventory stale (the Phase 0 failure).
+plugin: amazon.aws.aws_ec2
+
+regions:
+  - us-west-2
+
+filters:
+  tag:Project: crra
+  tag:Environment: dev
+  instance-state-name: running
+
+# Terraform's Name tag becomes the inventory hostname.
+hostnames:
+  - tag:Name
+
+# Connect through SSM Session Manager: ansible_host is the instance ID, and
+# ansible.cfg's ProxyCommand tunnels SSH over the SSM API (443). No inbound
+# port 22 is needed, and the control node can sit behind a corporate proxy.
+compose:
+  ansible_host: instance_id
+  private_ip: private_ip_address
+  public_ip: public_ip_address
+
+# Group by Role tag -> role_jenkins, role_k3s, role_test
+keyed_groups:
+  - key: tags.Role
+    prefix: role
+    separator: _
+
+groups:
+  crra: true

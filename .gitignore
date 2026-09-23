@@ -19,3 +19,9 @@ venv/
 *.tfstate.*
 *.tfplan
 crash.log
+
+# Ansible
+*.retry
+.ansible/
+*vault-pass*
+*vault_pass*

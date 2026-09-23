@@ -1,0 +1,25 @@
+# Managed by Ansible (roles/monitoring). Do not edit by hand.
+groups:
+  - name: crra
+    rules:
+      # Fires when any scrape target has been unreachable for 2 minutes.
+      - alert: TargetDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ '{{ $labels.job }}' }} target {{ '{{ $labels.instance }}' }} is down"
+          description: "Prometheus has not scraped {{ '{{ $labels.instance }}' }} successfully for 2 minutes."
+
+      # Fires when more than 5% of app requests return 5xx over 5 minutes.
+      - alert: CrraHighErrorRate
+        expr: >-
+          sum(rate(crra_http_requests_total{status=~"5.."}[5m]))
+            / sum(rate(crra_http_requests_total[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "CRRA 5xx rate above 5%"
+          description: "More than 5% of requests to the risk assessor failed over the last 5 minutes."

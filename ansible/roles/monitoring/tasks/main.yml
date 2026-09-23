@@ -1,0 +1,44 @@
+---
+- name: Create node_exporter system user
+  ansible.builtin.user:
+    name: "{{ monitoring_node_exporter_user }}"
+    system: true
+    shell: /usr/sbin/nologin
+    create_home: false
+
+- name: Download and unpack node_exporter
+  ansible.builtin.unarchive:
+    src: "{{ monitoring_node_exporter_url }}"
+    dest: /opt
+    remote_src: true
+    creates: "/opt/node_exporter-{{ monitoring_node_exporter_version }}.linux-amd64/node_exporter"
+
+- name: Install node_exporter binary
+  ansible.builtin.copy:
+    src: "/opt/node_exporter-{{ monitoring_node_exporter_version }}.linux-amd64/node_exporter"
+    dest: /usr/local/bin/node_exporter
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0755"
+  notify: Restart node_exporter
+
+- name: Install node_exporter service unit
+  ansible.builtin.template:
+    src: node_exporter.service.j2
+    dest: /etc/systemd/system/node_exporter.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart node_exporter
+
+- name: Enable and start node_exporter
+  ansible.builtin.systemd:
+    name: node_exporter
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Configure Prometheus and Grafana on the monitoring server
+  ansible.builtin.include_tasks: server.yml
+  when: monitoring_server | bool

@@ -46,6 +46,9 @@ Response:
 ### GET /health
 Health check endpoint returning service status.
 
+### GET /metrics
+Prometheus text-format metrics (`crra_http_requests_total`, `crra_http_request_duration_seconds`, `crra_assessments_total`). Present only when `ENABLE_METRICS=true`.
+
 ## Architecture
 
 The system uses a **strategy pattern** for scoring, allowing different scoring algorithms to be swapped via configuration:
@@ -101,6 +104,7 @@ All configuration is via environment variables:
 | HIGH_RISK_THRESHOLD | 60 | Score threshold for HIGH risk |
 | CRITICAL_RISK_THRESHOLD | 80 | Score threshold for CRITICAL risk |
 | LOG_LEVEL | INFO | Application log level |
+| ENABLE_METRICS | true | Expose Prometheus metrics at /metrics |
 
 ## Contributing
 

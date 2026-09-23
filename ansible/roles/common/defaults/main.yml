@@ -1,0 +1,13 @@
+---
+# Overridable defaults for the common role.
+common_packages:
+  - curl
+  - jq
+  - unzip
+  - git
+  - python3
+  - unattended-upgrades
+common_timezone: Etc/UTC
+common_apt_cache_valid_time: 3600
+# Written to /etc/crra/environment, sourced by application tooling. Vaulted.
+common_crra_api_token: "{{ vault_crra_api_token }}"

@@ -1,0 +1,39 @@
+---
+- name: Install baseline packages
+  ansible.builtin.apt:
+    name: "{{ common_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: "{{ common_apt_cache_valid_time }}"
+
+- name: Set timezone
+  community.general.timezone:
+    name: "{{ common_timezone }}"
+
+- name: Ensure unattended security upgrades are enabled
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Create CRRA config directory
+  ansible.builtin.file:
+    path: /etc/crra
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+
+# Consumes a vaulted variable. no_log keeps the value out of playbook output.
+- name: Write CRRA environment file from vaulted secret
+  ansible.builtin.template:
+    src: environment.j2
+    dest: /etc/crra/environment
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true

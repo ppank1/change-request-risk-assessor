@@ -1,8 +1,12 @@
 #!/bin/bash
-# Deploy CRRA to Kubernetes
+# Deploy CRRA to Kubernetes.
+# Usage: scripts/deploy.sh <image-tag>   (tag = commit SHA the image was built from)
 set -e
 
-echo "=== Deploying CRRA ==="
+IMAGE_TAG="${1:?usage: deploy.sh <image-tag> -- the commit SHA the image was built from}"
+IMAGE="docker.io/crra:${IMAGE_TAG}"
+
+echo "=== Deploying CRRA ${IMAGE} ==="
 
 # Apply manifests in order
 kubectl apply -f k8s/namespace.yaml
@@ -16,6 +20,10 @@ echo "Deployment applied."
 
 kubectl apply -f k8s/service.yaml
 echo "Service applied."
+
+# Pin the exact image; the manifest carries only a placeholder tag.
+kubectl set image deployment/crra crra="${IMAGE}" -n crra-dev
+echo "Image pinned to ${IMAGE}."
 
 # Wait for rollout
 echo "Waiting for deployment to be ready..."

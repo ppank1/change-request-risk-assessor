@@ -1,0 +1,5 @@
+# Managed by Ansible (roles/hardening). Do not edit by hand.
+PermitRootLogin {{ hardening_ssh_permit_root_login }}
+PasswordAuthentication {{ hardening_ssh_password_authentication }}
+MaxAuthTries {{ hardening_ssh_max_auth_tries }}
+X11Forwarding no

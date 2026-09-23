@@ -1,0 +1,11 @@
+# Managed by Ansible (roles/monitoring). Do not edit by hand.
+apiVersion: 1
+providers:
+  - name: crra
+    folder: CRRA
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/dashboards

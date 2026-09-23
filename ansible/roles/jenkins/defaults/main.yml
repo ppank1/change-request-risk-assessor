@@ -1,0 +1,13 @@
+---
+jenkins_java_package: openjdk-17-jdk
+jenkins_repo_key_url: https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key
+jenkins_keyring: /etc/apt/keyrings/jenkins-keyring.asc
+jenkins_repo: "deb [signed-by={{ jenkins_keyring }}] https://pkg.jenkins.io/debian-stable binary/"
+jenkins_home: /var/lib/jenkins
+# The root URL Jenkins embeds in links and webhooks. Set from the Elastic IP
+# in group_vars so it is re-asserted on every run and can never go stale.
+jenkins_url: "http://localhost:8080/"
+jenkins_admin_email: ""
+jenkins_extra_packages:
+  - kubectl
+jenkins_kubectl_url: "https://dl.k8s.io/release/v1.31.0/bin/linux/amd64/kubectl"

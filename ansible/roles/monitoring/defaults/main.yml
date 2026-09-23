@@ -1,0 +1,34 @@
+---
+monitoring_node_exporter_version: "1.8.2"
+monitoring_node_exporter_port: 9100
+monitoring_node_exporter_user: node_exporter
+monitoring_node_exporter_url: >-
+  https://github.com/prometheus/node_exporter/releases/download/v{{ monitoring_node_exporter_version
+  }}/node_exporter-{{ monitoring_node_exporter_version }}.linux-amd64.tar.gz
+# Prometheus + Grafana are installed only where this is true (the Jenkins host).
+monitoring_server: false
+
+# --- Prometheus (server only) -----------------------------------------------
+monitoring_prometheus_version: "2.54.1"
+monitoring_prometheus_port: 9090
+monitoring_prometheus_user: prometheus
+monitoring_prometheus_url: >-
+  https://github.com/prometheus/prometheus/releases/download/v{{ monitoring_prometheus_version
+  }}/prometheus-{{ monitoring_prometheus_version }}.linux-amd64.tar.gz
+monitoring_prometheus_scrape_interval: 15s
+monitoring_prometheus_retention: 7d
+# Scrape targets are built from the dynamic inventory: every host in the
+# `crra` group gets a node_exporter target by private IP, so adding a host
+# to AWS with the right tags adds it to monitoring on the next run.
+monitoring_prometheus_node_group: crra
+# The application: NodePort on the k3s host, scraped by private IP.
+monitoring_app_target_host: "{{ hostvars[groups['role_k3s'][0]].private_ip_address }}"
+monitoring_app_target_port: 30000
+
+# --- Grafana (server only) --------------------------------------------------
+monitoring_grafana_port: 3000
+monitoring_grafana_repo_key_url: https://apt.grafana.com/gpg.key
+monitoring_grafana_keyring: /etc/apt/keyrings/grafana.gpg
+monitoring_grafana_repo: "deb [signed-by={{ monitoring_grafana_keyring }}] https://apt.grafana.com stable main"
+monitoring_grafana_admin_user: admin
+monitoring_grafana_admin_password: "{{ vault_grafana_admin_password }}"
