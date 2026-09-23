@@ -179,3 +179,8 @@ Each finding was either fixed or accepted with a written reason next to the reso
 ### Prevention
 - tfsec runs with `--no-colour` (the Jenkins console has no ANSI renderer) and `--tfvars-file` so findings read cleanly and reflect the real variable values.
 - Accepted risks live beside the code they describe, so a reviewer sees the reasoning in the same diff as any change to that resource.
+
+### Follow-ups surfaced by the same first full run
+- **Terraform Plan** then failed with `AccessDenied: logs:DescribeLogGroups` — the CI role predates the flow-log group added as one of the tfsec fixes. Rather than grant `logs:*`, ran the plan locally with `TF_LOG=debug` and enumerated every API call it makes: EC2 `Describe*`, five IAM reads, S3, DynamoDB and exactly two CloudWatch Logs reads (`DescribeLogGroups`, `ListTagsForResource`). Those two were added; nothing else.
+- **Deploy** then exited 137 *after* `deployment "crra" successfully rolled out`. `deploy.sh` verified health by `kubectl exec` into `.items[0]` — right after a rolling update that is often the old pod, still terminating, so the exec was SIGKILLed. Never seen before because Deploy had never run from the pipeline. Replaced with a check through the Service (`http://crra-service:5000/health` from a short-lived pod) plus an assertion that every Running pod is on the image just deployed.
+- Next build: 13/13 stages green; plan `No changes`; `site.yml` from Jenkins `ok=62 changed=0 failed=0`.
