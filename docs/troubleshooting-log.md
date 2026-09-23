@@ -184,3 +184,22 @@ Each finding was either fixed or accepted with a written reason next to the reso
 - **Terraform Plan** then failed with `AccessDenied: logs:DescribeLogGroups` — the CI role predates the flow-log group added as one of the tfsec fixes. Rather than grant `logs:*`, ran the plan locally with `TF_LOG=debug` and enumerated every API call it makes: EC2 `Describe*`, five IAM reads, S3, DynamoDB and exactly two CloudWatch Logs reads (`DescribeLogGroups`, `ListTagsForResource`). Those two were added; nothing else.
 - **Deploy** then exited 137 *after* `deployment "crra" successfully rolled out`. `deploy.sh` verified health by `kubectl exec` into `.items[0]` — right after a rolling update that is often the old pod, still terminating, so the exec was SIGKILLed. Never seen before because Deploy had never run from the pipeline. Replaced with a check through the Service (`http://crra-service:5000/health` from a short-lived pod) plus an assertion that every Running pod is on the image just deployed.
 - Next build: 13/13 stages green; plan `No changes`; `site.yml` from Jenkins `ok=62 changed=0 failed=0`.
+
+---
+
+## Incident 8: Deploy with a mistyped image tag (staged for Phase 8)
+
+**Date:** 2026-09-23
+
+### Symptom
+After `kubectl set image` to `docker.io/ppankh/crra:99925d1d953` (one character short of the real SHA tag), `kubectl get pods` showed the two existing pods Running and one new pod `ImagePullBackOff`, READY 0/1. The rollout never completed. `/health` via the NodePort kept answering throughout.
+
+### Investigation
+`kubectl describe pod` on the Pending pod: `State: Waiting`, `Reason: ImagePullBackOff`; Events: `Failed to pull image "docker.io/ppankh/crra:99925d1d953": ... manifest unknown`, then `Back-off pulling image`. The tag does not exist in the registry; nothing else was wrong.
+
+### Resolution
+`kubectl rollout undo deployment/crra -n crra-dev` — returned to the previous ReplicaSet; both pods Running on `99925d1d9539`. One command, no manifest edits.
+
+### Prevention
+- The Deployment's `maxUnavailable: 0` / `maxSurge: 1` is what kept service up: the old pods are not removed until a new one is Ready, and a pod that cannot pull is never Ready.
+- The pipeline is the only route that should set the image; `deploy.sh` now asserts every Running pod is on the tag it just pushed, so a bad tag from the pipeline fails the build rather than lingering.
