@@ -25,3 +25,6 @@ crash.log
 .ansible/
 *vault-pass*
 *vault_pass*
+
+# Kiro CLI / KiroCrew local agent settings -- not part of the project
+.kiro/
