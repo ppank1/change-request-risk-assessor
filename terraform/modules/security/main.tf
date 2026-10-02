@@ -295,6 +295,25 @@ data "aws_iam_policy_document" "jenkins_ci" {
       resources = var.secret_parameter_arns
     }
   }
+  # terraform plan resolves data.aws_kms_alias.ssm: ListAliases (no
+  # resource-level scope exists for it) then DescribeKey on the target key.
+  #tfsec:ignore:aws-iam-no-policy-wildcards
+  dynamic "statement" {
+    for_each = length(var.secret_parameter_arns) > 0 ? [1] : []
+    content {
+      sid       = "ReadSecretsKeyAlias"
+      actions   = ["kms:ListAliases"]
+      resources = ["*"]
+    }
+  }
+  dynamic "statement" {
+    for_each = length(var.secret_parameter_arns) > 0 ? [1] : []
+    content {
+      sid       = "DescribeSecretsKey"
+      actions   = ["kms:DescribeKey"]
+      resources = [var.secrets_kms_key_arn]
+    }
+  }
   dynamic "statement" {
     for_each = length(var.secret_parameter_arns) > 0 ? [1] : []
     content {

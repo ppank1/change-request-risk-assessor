@@ -203,3 +203,18 @@ After `kubectl set image` to `docker.io/ppankh/crra:99925d1d953` (one character 
 ### Prevention
 - The Deployment's `maxUnavailable: 0` / `maxSurge: 1` is what kept service up: the old pods are not removed until a new one is Ready, and a pod that cannot pull is never Ready.
 - The pipeline is the only route that should set the image; `deploy.sh` now asserts every Running pod is on the tag it just pushed, so a bad tag from the pipeline fails the build rather than lingering.
+
+## Incident 9: Phase 10 commit broke Terraform Plan in the pipeline (build #21)
+
+### Symptom
+Build #21, the first after the Phase 10 push, failed in Terraform Plan: `Error: reading KMS Alias (alias/aws/ssm): ... AccessDeniedException: User: arn:aws:sts::066396400145:assumed-role/crra-jenkins-role/... is not authorized to perform: kms:ListAliases on resource: *`, `with data.aws_kms_alias.ssm`. The same plan had succeeded from the devdesk with admin credentials.
+
+### Investigation
+Phase 10 added `data "aws_kms_alias" "ssm"` to `secrets.tf` so the CI role's `kms:Decrypt` statement could name the SSM key's ARN. Resolving that data source calls `kms:ListAliases` and `kms:DescribeKey`. The CI role's `TerraformPlanRead` statement was built by enumerating the plan's API calls (Incident 7) -- before the data source existed. Admin credentials masked the gap locally; the least-privilege role exposed it on the first pipeline run.
+
+### Resolution
+Two statements added to the CI policy, created only when secrets are wired: `kms:ListAliases` on `*` (the action has no resource-level scope) and `kms:DescribeKey` on the SSM key ARN only. No `kms:*`. Applied from the devdesk, then re-triggered the pipeline.
+
+### Prevention
+- Every new `data` source in a root that the pipeline plans needs its read actions added to the CI role in the same commit. The pipeline's own plan, not a local admin plan, is the test.
+- The policy comment now records why `ListAliases` is wildcarded, so tfsec's `aws-iam-no-policy-wildcards` ignore has a stated reason.
