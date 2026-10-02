@@ -19,6 +19,37 @@ SSH is for **reading**: logs, `systemctl status`, `kubectl get`. If a read revea
 
 **Break-glass.** If production is down and a manual change is the fastest recovery: make it, then within the same working day (a) record it in `docs/troubleshooting-log.md` and (b) land the equivalent change in Terraform/Ansible so the next `plan` / `playbook` run is clean. The manual change is a loan, not a fix.
 
+## Deploying
+
+There is one way to deploy: push to `main`. The Jenkins job `crra-pipeline` runs Lint → Test → Security Scan → Terraform Validate → IaC Security Scan → Ansible Lint → Terraform Plan → Docker Build → Trivy Scan → Push → Deploy → Configuration Management. Nothing after the Plan stage runs unless every gate before it passed, and Push/Deploy run only on `main`.
+
+- **Application change** — merge to `main`. Deploy pins the image to `docker.io/ppankh/crra:<git-sha>`, runs `kubectl rollout status`, checks `/health` through the Service and asserts every running pod is on that SHA. The build is green only when both the rollout and the Ansible run (`changed=0`) finished.
+- **Infrastructure change** — Terraform is *planned* by the pipeline, never applied. Open a PR, read `reports/terraform-plan.txt` archived on the PR's build, merge, then an operator applies from a devdesk: `terraform apply -var-file=<env>.tfvars` in `terraform/environments/<env>`. The next build's plan must then be `No changes`.
+- **Host configuration** — Ansible roles are applied by the Configuration Management stage on every build, with the Jenkins instance role. An operator can also run `ansible-playbook playbooks/site.yml` with `ada` credentials; the result must be the same.
+
+Build watch without the UI (SSM only, no VPN): `ansible crra-jenkins-001 -m shell -a 'tail -5 $(ls -d /var/lib/jenkins/jobs/crra-pipeline/builds/[0-9]* | sort -V | tail -1)/log'`.
+
+## Rolling back
+
+| What went wrong | Roll back with | Notes |
+|---|---|---|
+| Bad application release | `kubectl rollout undo deployment/crra -n crra-dev` **then** `git revert` the commit and push | `undo` restores the previous ReplicaSet in seconds (Incident 8). The revert is still required: the next push would otherwise redeploy the bad SHA. |
+| Bad image tag / pull failure | Same as above | With `maxUnavailable: 0` the old pods keep serving while the new one sits in `ImagePullBackOff` — users are not affected; fix at leisure. |
+| Bad Terraform apply | `git revert` the commit, `terraform plan`, read it, `terraform apply` | State is versioned in S3; a plan from the reverted code is the rollback. Never edit state by hand. For an instance that must go back to a previous AMI/`user_data`, that is a replacement (below). |
+| Bad Ansible change | `git revert`, re-run `site.yml` | Roles are idempotent; the previous template is re-rendered and the service restarted by its handler. |
+| Bad secret value | `aws ssm put-parameter --overwrite` with the previous version's value (`get-parameter-history`), re-run `site.yml` | Grafana only reads its password at first start — rotate the live one with `grafana-cli admin reset-admin-password` (Secrets, below). |
+
+## Responding to alerts
+
+Prometheus evaluates `alerts.yml` (rendered by the `monitoring` role); there is no Alertmanager, so an alert is visible at `http://<jenkins-eip>:9090/alerts` and on the Grafana overview, not paged. Scrapes come from the Jenkins host's private IP only (the 9100 rule in `modules/security` allows exactly that /32), so a `TargetDown` is never caused by anything outside the VPC.
+
+| Alert | Fires when | First look | Likely causes and fix |
+|---|---|---|---|
+| `TargetDown` (critical) | `up == 0` for 2 min on any scrape job (`prometheus`, `node`, `crra-app`) | `/targets` in Prometheus: which job, which instance, the scrape error text | **`node` on a host** — instance stopped or node_exporter dead: `aws ec2 describe-instances`, then `ansible <host> -m shell -a 'systemctl status node_exporter'`; fix is `site.yml`, not `systemctl start`. **`i/o timeout` to port 9100** — security-group rule missing (Incident 4): confirm in `modules/security`, `terraform plan`. **`crra-app`** — pods not Ready or NodePort 30000 not answering: `kubectl get pods -n crra-dev`, `kubectl describe pod`, then see Rolling back. |
+| `CrraHighErrorRate` (warning) | 5xx > 5 % of requests over 5 min, for 5 min | Grafana *HTTP by status* panel; `kubectl logs -n crra-dev deploy/crra --since=10m` | Usually the last deploy — compare the firing time with the latest build; `rollout undo` first, read logs second. A single bad client sending malformed requests produces 4xx, not 5xx, and does not fire this. If the rate is real and not release-related, scale: `kubectl scale deployment/crra -n crra-dev --replicas=3`, then land the number in `k8s/deployment.yaml`. |
+
+After any alert: one line in `docs/troubleshooting-log.md` — what fired, what it was, what changed in code so it cannot recur.
+
 ## Rebuilding a host (immutable replacement)
 
 Hosts are replaced, not repaired. The instance is destroyed and a new one is created from the same code; `user_data` brings it to the baseline, Ansible layers on the role.
@@ -108,6 +139,25 @@ Then `ansible-playbook playbooks/site.yml` to push the new value to the hosts. `
 | Drift | `terraform plan -var-file=dev.tfvars` | `No changes.` — anything else is drift or an unlanded change |
 | Hosts up | `aws ec2 describe-instances --filters Name=tag:Project,Values=crra --query 'Reservations[].Instances[].[Tags[?Key==\`Name\`]\|[0].Value,State.Name]' --output table` | all `running` |
 | Config drift inside hosts | `ansible-playbook playbooks/site.yml --check` | `changed=0` |
+
+## Known failure modes
+
+Each of these has happened once. The symptom is what you will see first; the number is the entry in [troubleshooting-log.md](troubleshooting-log.md).
+
+| Symptom | Cause | What prevents it now | # |
+|---|---|---|---|
+| Jenkins URL / dashboards unreachable after a stop-start; Jenkins root URL wrong | Public IPs changed; a hand-set value had no owner | Elastic IPs in Terraform; root URL set by Ansible; *no manual mutation* policy | (Policy, above) |
+| `permission denied … /var/run/docker.sock` in a build | Jenkins user not in the `docker` group | `jenkins` role manages group membership | 1 |
+| Pod `CrashLoopBackOff` right after deploy | Readiness probe fired before the app was listening | `initialDelaySeconds` raised; `/health` checked through the Service before the build goes green | 2 |
+| Pod `ImagePullBackOff`, rollout never completes, users unaffected | Image tag does not exist | `maxUnavailable: 0`; image tag is the git SHA, never typed by hand | 3, 8 |
+| Prometheus `TargetDown`, `dial tcp …:9100: i/o timeout` | No security-group rule for node_exporter | Rule in `modules/security` from the Jenkins /32; tfsec gate | 4 |
+| Every build green, nothing ever deployed | `when { branch }` gate never matched a plain Pipeline job | Gate checks `GIT_BRANCH` in both forms; Deploy asserts pods are on the new SHA | 5 |
+| Operator locked out of 8080/3000/9090 | VPN egress IP changed; allowlist was a /32 | Allowlist is the corporate egress /22 plus the devdesk range, in `dev.tfvars` | 6 |
+| Build fails at Terraform Plan with `AccessDenied` | CI instance role lacks a read the plan now makes (new data source, new resource type) | Enumerate the call with `TF_LOG=debug`, add exactly that action to `modules/security` — never a wildcard | 7, 9 |
+| Build fails at IaC Security Scan | New Terraform introduced a tfsec finding | Fix or annotate `#tfsec:ignore:<rule>` **with the reason** beside the resource | 7 |
+| Deploy succeeds, health check exits 137 | Health probe hit a terminating old pod | Probe goes through the Service, then asserts every Running pod is on the new image | 7 |
+| `Error acquiring the state lock` | Another operator or a build holds the lock | Expected — see *Working in a team*; `force-unlock` only for a dead holder | — |
+| Ansible run `changed>0` when nothing was meant to change | A value drifted outside code (secret, hand edit) | Treat as drift: find the source, land it in code, re-run until `changed=0` | — |
 
 ## Adding a new host
 
