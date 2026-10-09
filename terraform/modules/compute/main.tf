@@ -95,6 +95,12 @@ resource "aws_instance" "k3s" {
 resource "aws_eip" "jenkins" {
   domain = "vpc"
   tags   = { Name = "${var.jenkins.name}-eip" }
+
+  # A released EIP cannot be recovered and every URL in the portfolio
+  # points at it. A plan that would destroy this must fail loudly.
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_eip_association" "jenkins" {
@@ -105,6 +111,12 @@ resource "aws_eip_association" "jenkins" {
 resource "aws_eip" "k3s" {
   domain = "vpc"
   tags   = { Name = "${var.k3s.name}-eip" }
+
+  # A released EIP cannot be recovered and every URL in the portfolio
+  # points at it. A plan that would destroy this must fail loudly.
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_eip_association" "k3s" {
